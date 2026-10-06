@@ -28,11 +28,12 @@ jobs:
           git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
-      - name: Verify iOS SDK
+      - name: Install iOS SDKs
         run: |
+          rm -rf "$HOME/theos/sdks"
+          git clone --depth=1 https://github.com/theos/sdks.git "$HOME/theos/sdks"
           echo "Available SDKs:"
-          ls -la "$HOME/theos/sdks"
-          test -n "$(find "$HOME/theos/sdks" -maxdepth 1 -name 'iPhoneOS*.sdk' -print -quit)"
+          find "$HOME/theos/sdks" -maxdepth 1 -name 'iPhoneOS*.sdk' -print
 
       - name: Build package
         run: |
