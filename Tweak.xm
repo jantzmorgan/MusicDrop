@@ -1,12 +1,35 @@
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#import "MusicDrop/MDImportViewController.h"
 
-// Milestone 1 deliberately keeps the Music process hook minimal.
-// The actual importer is isolated in MDImportCoordinator so private
-// Music-library integration can be tested and revised without spreading
-// fragile implementation details throughout the tweak.
+static void MDPresentPendingImport(void) {
+    NSString *candidate = UIPasteboard.generalPasteboard.string;
+    if (!candidate.length) return;
+
+    NSURL *url = [NSURL URLWithString:candidate];
+    if (!url.isFileURL) return;
+
+    UIWindow *window = UIApplication.sharedApplication.keyWindow;
+    UIViewController *root = window.rootViewController;
+    if (!root || root.presentedViewController) return;
+
+    MDImportViewController *controller = [[MDImportViewController alloc] initWithAudioURL:url];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:controller];
+    [root presentViewController:nav animated:YES completion:nil];
+}
+
+%hook MusicApplicationDelegate
+- (void)applicationDidBecomeActive:(UIApplication *)application {
+    %orig;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        MDPresentPendingImport();
+    });
+}
+%end
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[MusicDrop] Loaded v0.0.1");
+        NSLog(@"[MusicDrop] Loaded v0.0.2");
     }
 }
