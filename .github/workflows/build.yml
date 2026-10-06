@@ -1,0 +1,47 @@
+name: Build MusicDrop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "Makefile"
+      - "control"
+      - "MusicDrop.plist"
+      - "Tweak.xm"
+      - "MusicDrop/**"
+      - ".github/workflows/build.yml"
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Theos dependencies
+        run: |
+          brew install ldid xz
+
+      - name: Install Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Install iOS SDK
+        run: |
+          git clone --depth=1 https://github.com/theos/sdks.git "$HOME/theos/sdks"
+
+      - name: Build package
+        run: |
+          make clean package FINALPACKAGE=1
+          echo "Built packages:"
+          find packages -maxdepth 1 -type f -name "*.deb" -print
+
+      - name: Upload DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicDrop-DEB
+          path: packages/*.deb
+          if-no-files-found: error
