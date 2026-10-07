@@ -3,8 +3,6 @@
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <MediaPlayer/MediaPlayer.h>
-#import "MDLocalHTTPServer.h"
 
 static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
 
@@ -101,13 +99,6 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
         return;
     }
 
-    NSError *bridgeError = nil;
-    NSURL *servedURL = [[MDLocalHTTPServer sharedServer] URLForFileURL:audioURL error:&bridgeError];
-    if (!servedURL) {
-        if (completion) completion(NO, bridgeError);
-        return;
-    }
-
     NSInteger itemID = (NSInteger)arc4random_uniform(90000000) + 10000000;
     NSInteger year = metadata.year.integerValue ?: [[NSCalendar currentCalendar] component:NSCalendarUnitYear fromDate:NSDate.date];
     NSInteger track = metadata.trackNumber.integerValue ?: 1;
@@ -120,7 +111,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     NSDictionary *payload = @{
         @"purchaseDate": NSDate.date,
         @"is-purchased-redownload": @YES,
-        @"URL": servedURL.absoluteString,
+        @"URL": audioURL.absoluteString,
         @"songId": @(itemID),
         @"metadata": @{
             @"artistName": artist,
@@ -162,41 +153,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
             return;
         }
 
-        // StoreServices is asynchronous. Queue acceptance is NOT success.
-        // Poll the local Music library and only report success when the item survives there.
-        __block NSInteger attempts = 0;
-        __block void (^verify)(void);
-        verify = ^{
-            attempts++;
-            MPMediaQuery *query = [MPMediaQuery songsQuery];
-            BOOL found = NO;
-            for (MPMediaItem *item in query.items) {
-                NSString *itemTitle = [item valueForProperty:MPMediaItemPropertyTitle] ?: @"";
-                NSString *itemArtist = [item valueForProperty:MPMediaItemPropertyArtist] ?: @"";
-                if ([itemTitle isEqualToString:title] &&
-                    (!artist.length || [itemArtist isEqualToString:artist])) {
-                    found = YES;
-                    break;
-                }
-            }
-
-            if (found) {
-                if (completion) completion(YES, nil);
-                verify = nil;
-                return;
-            }
-
-            if (attempts >= 20) {
-                if (completion) completion(NO, [NSError errorWithDomain:MDErrorDomain code:2004 userInfo:@{NSLocalizedDescriptionKey:@"Apple accepted the import, but MusicDrop could not verify that the song survived in your Music library."}]);
-                verify = nil;
-                return;
-            }
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), verify);
-        };
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), verify);
+        if (completion) completion(NO, [NSError errorWithDomain:MDErrorDomain code:2005 userInfo:@{NSLocalizedDescriptionKey:@"Apple accepted the import request, but this build does not claim success until the media handoff is made durable."}]);
     } @catch (NSException *exception) {
         if (completion) completion(NO, [NSError errorWithDomain:MDErrorDomain code:2003 userInfo:@{NSLocalizedDescriptionKey:[NSString stringWithFormat:@"Native import exception: %@", exception.reason ?: exception.name]}]);
     }
