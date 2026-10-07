@@ -19,6 +19,7 @@
 @property (nonatomic, strong) UITextField *yearField;
 @property (nonatomic, strong) UITextField *trackField;
 @property (nonatomic, strong) UIButton *importButton;
+@property (nonatomic, weak, nullable) UITextField *activeField;
 @end
 
 @implementation MDImportViewController
@@ -30,6 +31,13 @@
     field.clearButtonMode = UITextFieldViewModeWhileEditing;
     field.delegate = self;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
+    field.returnKeyType = UIReturnKeyDone;
+
+    UIToolbar *toolbar = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+    UIBarButtonItem *flex = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
+    UIBarButtonItem *done = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(dismissKeyboard)];
+    toolbar.items = @[flex, done];
+    field.inputAccessoryView = toolbar;
     [field.heightAnchor constraintEqualToConstant:44].active = YES;
     return field;
 }
@@ -43,6 +51,7 @@
 
     self.scrollView = [UIScrollView new];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     [self.view addSubview:self.scrollView];
 
     self.stack = [UIStackView new];
@@ -97,6 +106,9 @@
         [self.stack addArrangedSubview:view];
     }
 
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+
     [self.artworkView.heightAnchor constraintEqualToAnchor:self.artworkView.widthAnchor].active = YES;
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor],
@@ -111,7 +123,60 @@
     ]];
 }
 
-- (void)closeTapped { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)dismissKeyboard {
+    [self.view endEditing:YES];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];
+    return YES;
+}
+
+- (void)textFieldDidBeginEditing:(UITextField *)textField {
+    self.activeField = textField;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        CGRect rect = [textField convertRect:textField.bounds toView:self.scrollView];
+        [self.scrollView scrollRectToVisible:CGRectInset(rect, 0, -24) animated:YES];
+    });
+}
+
+- (void)textFieldDidEndEditing:(UITextField *)textField {
+    if (self.activeField == textField) self.activeField = nil;
+}
+
+- (void)keyboardWillChange:(NSNotification *)notification {
+    NSDictionary *info = notification.userInfo;
+    CGRect keyboardScreen = [info[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGRect keyboard = [self.view convertRect:keyboardScreen fromView:nil];
+    CGFloat overlap = MAX(0.0, CGRectGetMaxY(self.view.bounds) - CGRectGetMinY(keyboard));
+
+    UIEdgeInsets inset = self.scrollView.contentInset;
+    inset.bottom = overlap + 16.0;
+    self.scrollView.contentInset = inset;
+    self.scrollView.scrollIndicatorInsets = inset;
+
+    if (self.activeField) {
+        CGRect rect = [self.activeField convertRect:self.activeField.bounds toView:self.scrollView];
+        [self.scrollView scrollRectToVisible:CGRectInset(rect, 0, -24) animated:YES];
+    }
+}
+
+- (void)keyboardWillHide:(NSNotification *)notification {
+    UIEdgeInsets inset = self.scrollView.contentInset;
+    inset.bottom = 0;
+    self.scrollView.contentInset = inset;
+    self.scrollView.scrollIndicatorInsets = inset;
+}
+
+- (void)closeTapped {
+    [self dismissKeyboard];
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
 
 - (void)chooseTapped {
     UIDocumentPickerViewController *picker =
