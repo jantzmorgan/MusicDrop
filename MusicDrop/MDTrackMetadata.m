@@ -1,7 +1,6 @@
 #import "MDTrackMetadata.h"
 
 @implementation MDTrackMetadata
-
 + (instancetype)metadataWithFallbackTitle:(NSString *)title {
     MDTrackMetadata *metadata = [MDTrackMetadata new];
     metadata.title = title.length ? title : @"Unknown Title";
@@ -9,7 +8,8 @@
     metadata.album = @"Unknown Album";
     metadata.albumArtist = @"";
     metadata.genre = @"";
+    metadata.composer = @"";
+    metadata.duration = 0;
     return metadata;
 }
-
 @end
