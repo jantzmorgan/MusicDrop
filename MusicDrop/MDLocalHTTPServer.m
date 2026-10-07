@@ -139,9 +139,11 @@
     for (NSString *line in lines) {
         if ([[line lowercaseString] hasPrefix:@"range: bytes="]) {
             NSString *range = [[line componentsSeparatedByString:@"="] lastObject];
-            NSArray *bounds = [range componentsSeparatedByString:@"-"];
-            if (bounds.firstObject.length) start = strtoull(bounds.firstObject.UTF8String, NULL, 10);
-            if (bounds.count > 1 && [bounds[1] length]) end = strtoull([bounds[1] UTF8String], NULL, 10);
+            NSArray<NSString *> *bounds = [range componentsSeparatedByString:@"-"];
+            NSString *startString = bounds.count > 0 ? bounds[0] : @"";
+            NSString *endString = bounds.count > 1 ? bounds[1] : @"";
+            if (startString.length) start = strtoull(startString.UTF8String, NULL, 10);
+            if (endString.length) end = strtoull(endString.UTF8String, NULL, 10);
             if (end >= fileSize) end = fileSize - 1;
             if (start <= end && start < fileSize) partial = YES;
             break;
