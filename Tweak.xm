@@ -15,36 +15,68 @@ static UIWindow *MDActiveWindow(void) {
         }
         if (windowScene.windows.firstObject) return windowScene.windows.firstObject;
     }
-    return nil;
+
+    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+        if (window.isKeyWindow) return window;
+    }
+    return UIApplication.sharedApplication.windows.firstObject;
+}
+
+static UIViewController *MDTopViewController(UIViewController *controller) {
+    if (!controller) return nil;
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        return MDTopViewController(((UINavigationController *)controller).visibleViewController);
+    }
+    if ([controller isKindOfClass:UITabBarController.class]) {
+        return MDTopViewController(((UITabBarController *)controller).selectedViewController);
+    }
+    if (controller.presentedViewController) {
+        return MDTopViewController(controller.presentedViewController);
+    }
+    return controller;
 }
 
 static void MDPresentTester(void) {
     if (MDPresentedThisActivation) return;
 
     UIWindow *window = MDActiveWindow();
-    UIViewController *root = window.rootViewController;
-    if (!root || root.presentedViewController) return;
+    UIViewController *presenter = MDTopViewController(window.rootViewController);
+    if (!presenter || !presenter.view.window) return;
 
     MDPresentedThisActivation = YES;
     MDImportViewController *controller = [MDImportViewController new];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:controller];
     nav.modalPresentationStyle = UIModalPresentationPageSheet;
-    [root presentViewController:nav animated:YES completion:nil];
+    [presenter presentViewController:nav animated:YES completion:nil];
 }
 
-%hook MusicApplicationDelegate
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-    %orig;
+static void MDApplicationBecameActive(NSNotification *note) {
     MDPresentedThisActivation = NO;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         MDPresentTester();
     });
 }
-%end
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[MusicDrop] Loaded v0.0.3");
+        NSLog(@"[MusicDrop] Loaded v0.0.4");
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter]
+                addObserverForName:UIApplicationDidBecomeActiveNotification
+                            object:nil
+                             queue:NSOperationQueue.mainQueue
+                        usingBlock:^(NSNotification *note) {
+                            MDApplicationBecameActive(note);
+                        }];
+
+            // If injection happens after Music is already active, still present once.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                MDPresentTester();
+            });
+        });
     }
 }
