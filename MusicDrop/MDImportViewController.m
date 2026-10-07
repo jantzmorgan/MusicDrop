@@ -24,6 +24,15 @@
 
 @implementation MDImportViewController
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (self.pendingAudioURL && !self.audioURL) {
+        NSURL *url = self.pendingAudioURL;
+        self.pendingAudioURL = nil;
+        [self loadAudioURL:url];
+    }
+}
+
 - (UITextField *)field:(NSString *)placeholder {
     UITextField *field = [UITextField new];
     field.placeholder = placeholder;
@@ -186,8 +195,7 @@
     [self presentViewController:picker animated:YES completion:nil];
 }
 
-- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-    NSURL *url = urls.firstObject;
+- (void)loadAudioURL:(NSURL *)url {
     if (!url) return;
 
     NSError *error = nil;
@@ -218,6 +226,10 @@
     self.importButton.enabled = YES;
 }
 
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    [self loadAudioURL:urls.firstObject];
+}
+
 - (void)syncFieldsToMetadata {
     self.metadata.title = self.titleField.text.length ? self.titleField.text : @"Unknown Title";
     self.metadata.artist = self.artistField.text.length ? self.artistField.text : @"Unknown Artist";
@@ -237,7 +249,7 @@
     [[MDImportCoordinator sharedCoordinator] importAudioAtURL:self.audioURL metadata:self.metadata completion:^(BOOL success, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             self.importButton.enabled = YES;
-            self.statusLabel.text = success ? @"Imported successfully." : @"Import backend not connected yet.";
+            self.statusLabel.text = success ? @"Apple Music accepted the native import. Check Library." : @"Import failed.";
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:success ? @"Imported" : @"MusicDrop"
                                                                            message:success ? @"The song is now in Music." : error.localizedDescription
                                                                     preferredStyle:UIAlertControllerStyleAlert];
