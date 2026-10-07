@@ -2,7 +2,8 @@
 #import "MDTrackMetadata.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
-#import <objc/runtime.h>\n#import "MDLocalHTTPServer.h"
+#import <objc/runtime.h>
+#import "MDLocalHTTPServer.h"
 
 static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
 
