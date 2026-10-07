@@ -6,7 +6,7 @@ static UITabBarController *MDTabController = nil;
 static UIViewController *MDMusicDropController = nil;
 
 static void MDInstallMusicDropTab(UITabBarController *tabController) {
-    if (!tabController || tabController == MDTabController) return;
+    if (!tabController) return;
 
     for (UIViewController *controller in tabController.viewControllers) {
         if ([controller.tabBarItem.title isEqualToString:@"MusicDrop"]) {
@@ -55,5 +55,24 @@ static void MDInstallMusicDropTab(UITabBarController *tabController) {
         NSLog(@"[MusicDrop] product build injected into %@ (%@)",
               NSProcessInfo.processInfo.processName,
               NSBundle.mainBundle.bundleIdentifier);
+
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:UIApplicationDidBecomeActiveNotification
+                        object:nil
+                         queue:NSOperationQueue.mainQueue
+                    usingBlock:^(__unused NSNotification *note) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                    if (![scene isKindOfClass:UIWindowScene.class]) continue;
+                    for (UIWindow *window in scene.windows) {
+                        UIViewController *root = window.rootViewController;
+                        if ([root isKindOfClass:UITabBarController.class]) {
+                            MDInstallMusicDropTab((UITabBarController *)root);
+                        }
+                    }
+                }
+            });
+        }];
     }
 }
