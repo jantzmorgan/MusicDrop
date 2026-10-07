@@ -1,78 +1,59 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import "MusicDrop/MDImportViewController.h"
+#import "MusicDrop/MDHubViewController.h"
 
-static BOOL MDPresented = NO;
+static UITabBarController *MDTabController = nil;
+static UIViewController *MDMusicDropController = nil;
 
-static UIWindow *MDActiveWindow(void) {
-    NSSet<UIScene *> *scenes = UIApplication.sharedApplication.connectedScenes;
-    for (UIScene *scene in scenes) {
-        if (![scene isKindOfClass:UIWindowScene.class]) continue;
-        UIWindowScene *windowScene = (UIWindowScene *)scene;
-        if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+static void MDInstallMusicDropTab(UITabBarController *tabController) {
+    if (!tabController || tabController == MDTabController) return;
 
-        for (UIWindow *window in windowScene.windows) {
-            if (window.isKeyWindow) return window;
-        }
-        for (UIWindow *window in windowScene.windows) {
-            if (!window.hidden && window.alpha > 0.0) return window;
+    for (UIViewController *controller in tabController.viewControllers) {
+        if ([controller.tabBarItem.title isEqualToString:@"MusicDrop"]) {
+            MDTabController = tabController;
+            MDMusicDropController = controller;
+            return;
         }
     }
-    return nil;
+
+    MDHubViewController *hub = [MDHubViewController new];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:hub];
+    nav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"MusicDrop"
+                                                   image:[UIImage systemImageNamed:@"arrow.down.circle"]
+                                                     tag:9876];
+
+    NSMutableArray *controllers = [tabController.viewControllers mutableCopy] ?: [NSMutableArray array];
+    [controllers addObject:nav];
+    tabController.viewControllers = controllers;
+
+    MDTabController = tabController;
+    MDMusicDropController = nav;
 }
 
-static UIViewController *MDPresenter(UIViewController *controller) {
-    if (!controller) return nil;
-    if (controller.presentedViewController) return MDPresenter(controller.presentedViewController);
-    if ([controller isKindOfClass:UINavigationController.class]) {
-        return MDPresenter(((UINavigationController *)controller).visibleViewController);
+%hook UITabBarController
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    NSString *bundleID = NSBundle.mainBundle.bundleIdentifier;
+    if ([bundleID isEqualToString:@"com.apple.Music"]) {
+        MDInstallMusicDropTab(self);
     }
-    if ([controller isKindOfClass:UITabBarController.class]) {
-        return MDPresenter(((UITabBarController *)controller).selectedViewController);
-    }
-    return controller;
 }
 
-static void MDTryPresent(void) {
-    if (MDPresented) return;
-    UIWindow *window = MDActiveWindow();
-    UIViewController *presenter = MDPresenter(window.rootViewController);
-    if (!presenter || !presenter.viewIfLoaded.window) return;
-
-    MDPresented = YES;
-    MDImportViewController *musicDrop = [MDImportViewController new];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:musicDrop];
-    nav.modalPresentationStyle = UIModalPresentationPageSheet;
-    [presenter presentViewController:nav animated:YES completion:nil];
-}
-
-static void MDSchedulePresentation(void) {
-    MDPresented = NO;
-    for (NSNumber *delay in @[@0.75, @1.5, @3.0]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                     (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            MDTryPresent();
+- (void)setViewControllers:(NSArray<UIViewController *> *)viewControllers animated:(BOOL)animated {
+    %orig;
+    NSString *bundleID = NSBundle.mainBundle.bundleIdentifier;
+    if ([bundleID isEqualToString:@"com.apple.Music"]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            MDInstallMusicDropTab(self);
         });
     }
 }
+%end
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[MusicDrop] injected into %@ (%@)",
+        NSLog(@"[MusicDrop] product build injected into %@ (%@)",
               NSProcessInfo.processInfo.processName,
               NSBundle.mainBundle.bundleIdentifier);
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [[NSNotificationCenter defaultCenter]
-                addObserverForName:UIApplicationDidBecomeActiveNotification
-                            object:nil
-                             queue:NSOperationQueue.mainQueue
-                        usingBlock:^(__unused NSNotification *note) {
-                            MDSchedulePresentation();
-                        }];
-
-            MDSchedulePresentation();
-        });
     }
 }
