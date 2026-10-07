@@ -1,8 +1,8 @@
 Package: com.jantzmorgan.musicdrop
 Name: MusicDrop
-Version: 0.1.0
+Version: 0.2.0
 Architecture: iphoneos-arm64
-Description: Import local music into the native iOS Music library.
+Description: Import and convert local media inside the native iOS Music app.
 Maintainer: Jantz Morgan
 Author: Jantz Morgan
 Section: Tweaks
