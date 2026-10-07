@@ -5,42 +5,26 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "Makefile"
-      - "control"
-      - "MusicDrop.plist"
-      - "Tweak.xm"
-      - "MusicDrop/**"
-      - ".github/workflows/build.yml"
+      - "BUILD_TRIGGER"
 
 jobs:
   build:
     runs-on: macos-14
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install Theos dependencies
         run: brew install ldid xz
-
       - name: Install Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
-
       - name: Install iOS SDKs
         run: |
           rm -rf "$HOME/theos/sdks"
           git clone --depth=1 https://github.com/theos/sdks.git "$HOME/theos/sdks"
-          echo "Available SDKs:"
-          find "$HOME/theos/sdks" -maxdepth 1 -name 'iPhoneOS*.sdk' -print
-
       - name: Build package
-        run: |
-          make clean package FINALPACKAGE=1
-          echo "Built packages:"
-          find packages -maxdepth 1 -type f -name "*.deb" -print
-
+        run: make clean package FINALPACKAGE=1
       - name: Upload DEB
         uses: actions/upload-artifact@v4
         with:
