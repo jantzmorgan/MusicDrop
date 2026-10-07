@@ -1,7 +1,10 @@
 {
     Filter = {
-        Bundles = (
-            "com.apple.Music"
+        Executables = (
+            "MobileMusicPlayer",
+            "Music~iphone",
+            "Music~ipad",
+            "Music"
         );
     };
 }
