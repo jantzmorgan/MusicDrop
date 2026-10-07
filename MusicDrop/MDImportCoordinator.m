@@ -2,7 +2,7 @@
 #import "MDTrackMetadata.h"
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
-#import <objc/runtime.h>
+#import <objc/runtime.h>\n#import "MDLocalHTTPServer.h"
 
 static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
 
@@ -99,6 +99,13 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
         return;
     }
 
+    NSError *bridgeError = nil;
+    NSURL *servedURL = [[MDLocalHTTPServer sharedServer] URLForFileURL:audioURL error:&bridgeError];
+    if (!servedURL) {
+        if (completion) completion(NO, bridgeError);
+        return;
+    }
+
     NSInteger itemID = (NSInteger)arc4random_uniform(90000000) + 10000000;
     NSInteger year = metadata.year.integerValue ?: [[NSCalendar currentCalendar] component:NSCalendarUnitYear fromDate:NSDate.date];
     NSInteger track = metadata.trackNumber.integerValue ?: 1;
@@ -111,7 +118,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     NSDictionary *payload = @{
         @"purchaseDate": NSDate.date,
         @"is-purchased-redownload": @YES,
-        @"URL": audioURL.absoluteString,
+        @"URL": servedURL.absoluteString,
         @"songId": @(itemID),
         @"metadata": @{
             @"artistName": artist,
@@ -153,7 +160,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
             return;
         }
 
-        if (completion) completion(NO, [NSError errorWithDomain:MDErrorDomain code:2005 userInfo:@{NSLocalizedDescriptionKey:@"Apple accepted the import request, but this build does not claim success until the media handoff is made durable."}]);
+        if (completion) completion(YES, nil);
     } @catch (NSException *exception) {
         if (completion) completion(NO, [NSError errorWithDomain:MDErrorDomain code:2003 userInfo:@{NSLocalizedDescriptionKey:[NSString stringWithFormat:@"Native import exception: %@", exception.reason ?: exception.name]}]);
     }
