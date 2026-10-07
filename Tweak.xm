@@ -2,6 +2,21 @@
 #import <UIKit/UIKit.h>
 #import "MusicDrop/MDImportViewController.h"
 
+static UIWindow *MDActiveWindow(void) {
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+
+        UIWindowScene *windowScene = (UIWindowScene *)scene;
+        for (UIWindow *window in windowScene.windows) {
+            if (window.isKeyWindow) return window;
+        }
+
+        if (windowScene.windows.firstObject) return windowScene.windows.firstObject;
+    }
+    return nil;
+}
+
 static void MDPresentPendingImport(void) {
     NSString *candidate = UIPasteboard.generalPasteboard.string;
     if (!candidate.length) return;
@@ -9,7 +24,7 @@ static void MDPresentPendingImport(void) {
     NSURL *url = [NSURL URLWithString:candidate];
     if (!url.isFileURL) return;
 
-    UIWindow *window = UIApplication.sharedApplication.keyWindow;
+    UIWindow *window = MDActiveWindow();
     UIViewController *root = window.rootViewController;
     if (!root || root.presentedViewController) return;
 
