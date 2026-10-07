@@ -30,7 +30,6 @@
     field.clearButtonMode = UITextFieldViewModeWhileEditing;
     field.delegate = self;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
-    field.heightAnchor.active = YES;
     [field.heightAnchor constraintEqualToConstant:44].active = YES;
     return field;
 }
