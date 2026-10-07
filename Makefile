@@ -9,6 +9,5 @@ TWEAK_NAME = MusicDrop
 MusicDrop_FILES = Tweak.xm MusicDrop/MDImportCoordinator.m MusicDrop/MDTrackMetadata.m MusicDrop/MDImportViewController.m MusicDrop/MDHubViewController.m MusicDrop/MDMediaConverter.m
 MusicDrop_CFLAGS = -fobjc-arc
 MusicDrop_FRAMEWORKS = UIKit Foundation AVFoundation MediaPlayer UniformTypeIdentifiers
-MusicDrop_PRIVATE_FRAMEWORKS = StoreServices
 
 include $(THEOS_MAKE_PATH)/tweak.mk
