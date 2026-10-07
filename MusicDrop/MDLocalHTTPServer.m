@@ -33,7 +33,10 @@
     if (self.serverFD >= 0) return YES;
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) goto fail;
+    if (fd < 0) {
+        if (error) *error = [NSError errorWithDomain:@"com.jantzmorgan.musicdrop.http" code:4001 userInfo:@{NSLocalizedDescriptionKey:@"MusicDrop could not create its local import bridge."}];
+        return NO;
+    }
 
     int yes = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -44,23 +47,29 @@
     addr.sin_port = htons(0);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) { close(fd); goto fail; }
-    if (listen(fd, 8) != 0) { close(fd); goto fail; }
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        close(fd);
+        if (error) *error = [NSError errorWithDomain:@"com.jantzmorgan.musicdrop.http" code:4001 userInfo:@{NSLocalizedDescriptionKey:@"MusicDrop could not bind its local import bridge."}];
+        return NO;
+    }
+
+    if (listen(fd, 8) != 0) {
+        close(fd);
+        if (error) *error = [NSError errorWithDomain:@"com.jantzmorgan.musicdrop.http" code:4001 userInfo:@{NSLocalizedDescriptionKey:@"MusicDrop could not listen on its local import bridge."}];
+        return NO;
+    }
 
     socklen_t len = sizeof(addr);
-    if (getsockname(fd, (struct sockaddr *)&addr, &len) != 0) { close(fd); goto fail; }
+    if (getsockname(fd, (struct sockaddr *)&addr, &len) != 0) {
+        close(fd);
+        if (error) *error = [NSError errorWithDomain:@"com.jantzmorgan.musicdrop.http" code:4001 userInfo:@{NSLocalizedDescriptionKey:@"MusicDrop could not resolve its local import bridge port."}];
+        return NO;
+    }
 
     self.serverFD = fd;
     self.port = ntohs(addr.sin_port);
-
-    dispatch_async(self.queue, ^{
-        [self acceptLoop];
-    });
+    dispatch_async(self.queue, ^{ [self acceptLoop]; });
     return YES;
-
-fail:
-    if (error) *error = [NSError errorWithDomain:@"com.jantzmorgan.musicdrop.http" code:4001 userInfo:@{NSLocalizedDescriptionKey:@"MusicDrop could not start its local import bridge."}];
-    return NO;
 }
 
 - (NSURL *)URLForFileURL:(NSURL *)fileURL error:(NSError **)error {
