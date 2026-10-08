@@ -66,6 +66,18 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
         }
     }
 #pragma clang diagnostic pop
+    for (AVMetadataItem *item in asset.metadata) {
+        NSString *identifier = item.identifier ?: @"";
+        NSString *key = item.key ? [item.key description] : @"";
+        NSString *value = item.stringValue;
+        if ([identifier containsString:@"albumArtist"] && value.length) result.albumArtist = value;
+        if (([identifier containsString:@"trackNumber"] || [key isEqualToString:@"trkn"]) && item.numberValue.integerValue > 0) result.trackNumber = item.numberValue;
+        if (([identifier containsString:@"discNumber"] || [key isEqualToString:@"disk"]) && item.numberValue.integerValue > 0) result.discNumber = item.numberValue;
+        if (([identifier containsString:@"year"] || [identifier containsString:@"date"]) && value.length >= 4) {
+            NSInteger year = [[value substringToIndex:4] integerValue];
+            if (year > 0 && year <= 9999) result.year = @(year);
+        }
+    }
     return result;
 }
 
@@ -145,6 +157,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
             @"sort-name": title,
             @"trackCount": @1,
             @"trackNumber": @(track),
+            @"discNumber": metadata.discNumber ?: @1,
             @"year": @(year)
         }
     };
