@@ -168,7 +168,16 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
         UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
         NSData *jpeg = UIImageJPEGRepresentation(scaled ?: image, 0.85);
-        if (jpeg.length) trackInfo[@"artworkData"] = jpeg;
+        if (jpeg.length) {
+            NSString *artPath = [[NSTemporaryDirectory() stringByAppendingPathComponent:@"MusicDrop"] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", NSUUID.UUID.UUIDString]];
+            if ([jpeg writeToFile:artPath atomically:YES]) {
+                NSURL *artURL = [[MDLocalHTTPServer sharedServer] URLForFileURL:[NSURL fileURLWithPath:artPath] error:nil];
+                if (artURL) {
+                    trackInfo[@"artworkURL"] = artURL.absoluteString;
+                    trackInfo[@"artworkUrl"] = artURL.absoluteString;
+                }
+            }
+        }
     }
     NSDictionary *payload = @{
         @"purchaseDate": NSDate.date,
