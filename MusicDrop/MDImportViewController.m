@@ -10,6 +10,10 @@
 @property (nonatomic) NSUInteger batchSuccessCount;
 @property (nonatomic) NSUInteger batchFailureCount;
 @property (nonatomic) BOOL importingBatch;
+@property (nonatomic, strong) NSMutableArray<MDTrackMetadata *> *batchMetadata;
+@property (nonatomic) NSUInteger selectedBatchIndex;
+@property (nonatomic, strong) UISegmentedControl *batchSelector;
+@property (nonatomic, strong) UIButton *applyCoverButton;
 @property (nonatomic, strong, nullable) MDTrackMetadata *metadata;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *stack;
@@ -130,7 +134,15 @@
     [self.artworkView.heightAnchor constraintEqualToConstant:110].active = YES;
     [self.artworkButton setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-    for (UIView *view in @[coverRow, self.statusLabel, self.fileLabel, choose,
+    self.batchSelector = [[UISegmentedControl alloc] initWithItems:@[]];
+    [self.batchSelector addTarget:self action:@selector(batchSelectionChanged:) forControlEvents:UIControlEventValueChanged];
+    self.batchSelector.hidden = YES;
+    self.applyCoverButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.applyCoverButton setTitle:@"Apply Cover to All Songs" forState:UIControlStateNormal];
+    [self.applyCoverButton addTarget:self action:@selector(applyCoverToAll) forControlEvents:UIControlEventTouchUpInside];
+    self.applyCoverButton.hidden = YES;
+
+    for (UIView *view in @[coverRow, self.applyCoverButton, self.statusLabel, self.fileLabel, choose, self.batchSelector,
                            self.titleField, self.artistField, self.albumField, self.albumArtistField,
                            self.genreField, self.yearField, self.trackField, self.importButton]) {
         [self.stack addArrangedSubview:view];
@@ -263,6 +275,10 @@
         return;
     }
 
+    [self displayAudioURL:url metadata:metadata];
+}
+
+- (void)displayAudioURL:(NSURL *)url metadata:(MDTrackMetadata *)metadata {
     self.audioURL = url;
     self.metadata = metadata;
     self.titleField.text = metadata.title;
@@ -292,27 +308,47 @@
         else self.statusLabel.text = @"Could not open that image (maximum 20 MB).";
         return;
     }
-    if (urls.count > 1) {
-        NSMutableArray<NSURL *> *valid = [NSMutableArray array];
-        for (NSURL *url in urls) {
-            if ([[MDImportCoordinator sharedCoordinator] isSupportedAudioURL:url]) [valid addObject:url];
-        }
-        self.batchURLs = valid.copy;
-        self.batchIndex = 0;
-        self.batchSuccessCount = 0;
-        self.batchFailureCount = 0;
-        if (!valid.count) {
-            self.statusLabel.text = @"No supported audio files selected.";
-            return;
-        }
-        [self loadAudioURL:valid.firstObject];
-        self.statusLabel.text = [NSString stringWithFormat:@"%lu songs selected. Edit the first song or import the batch.", (unsigned long)valid.count];
-        [self.importButton setTitle:[NSString stringWithFormat:@"Import %lu Songs", (unsigned long)valid.count] forState:UIControlStateNormal];
+    NSMutableArray<NSURL *> *valid = [NSMutableArray array];
+    NSMutableArray<MDTrackMetadata *> *tags = [NSMutableArray array];
+    for (NSURL *url in urls) {
+        if (![[MDImportCoordinator sharedCoordinator] isSupportedAudioURL:url]) continue;
+        MDTrackMetadata *tag = [[MDImportCoordinator sharedCoordinator] metadataForAudioURL:url error:nil];
+        if (tag) { [valid addObject:url]; [tags addObject:tag]; }
+    }
+    if (!valid.count) { self.statusLabel.text = @"No readable audio files selected."; return; }
+    self.batchURLs = valid.copy;
+    self.batchMetadata = tags;
+    self.selectedBatchIndex = 0;
+    [self.batchSelector removeAllSegments];
+    for (NSUInteger i = 0; i < valid.count; i++) {
+        NSString *name = valid[i].URLByDeletingPathExtension.lastPathComponent;
+        [self.batchSelector insertSegmentWithTitle:name atIndex:i animated:NO];
+    }
+    self.batchSelector.hidden = valid.count <= 1;
+    self.applyCoverButton.hidden = valid.count <= 1;
+    self.batchSelector.selectedSegmentIndex = 0;
+    [self displayAudioURL:valid.firstObject metadata:tags.firstObject];
+    [self.importButton setTitle:valid.count > 1 ? [NSString stringWithFormat:@"Import All (%lu)", (unsigned long)valid.count] : @"Import to Music" forState:UIControlStateNormal];
+    self.statusLabel.text = valid.count > 1 ? @"Select each song to edit its own metadata and artwork." : @"Ready to import.";
+}
+
+- (void)batchSelectionChanged:(UISegmentedControl *)sender {
+    if (self.importingBatch || sender.selectedSegmentIndex < 0) return;
+    [self syncFieldsToMetadata];
+    NSUInteger index = (NSUInteger)sender.selectedSegmentIndex;
+    if (index >= self.batchURLs.count) return;
+    self.selectedBatchIndex = index;
+    [self displayAudioURL:self.batchURLs[index] metadata:self.batchMetadata[index]];
+}
+
+- (void)applyCoverToAll {
+    [self syncFieldsToMetadata];
+    if (!self.metadata.artwork || self.batchMetadata.count < 2) {
+        self.statusLabel.text = @"Choose a cover image first.";
         return;
     }
-    self.batchURLs = nil;
-    [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
-    [self loadAudioURL:urls.firstObject];
+    for (MDTrackMetadata *track in self.batchMetadata) track.artwork = self.metadata.artwork;
+    self.statusLabel.text = @"Cover applied to all selected songs.";
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { self.selectingArtwork = NO; }
@@ -343,14 +379,12 @@
     self.importButton.enabled = NO;
     self.statusLabel.text = [NSString stringWithFormat:@"Queueing song %lu of %lu…", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
     NSError *error = nil;
-    MDTrackMetadata *track = [[MDImportCoordinator sharedCoordinator] metadataForAudioURL:url error:&error];
+    MDTrackMetadata *track = index < self.batchMetadata.count ? self.batchMetadata[index] : nil;
     if (!track) {
         self.batchFailureCount++;
         dispatch_async(dispatch_get_main_queue(), ^{ [self importNextBatchItem]; });
         return;
     }
-    // First song may be edited by the user. Subsequent songs retain their own embedded tags.
-    if (index == 0 && self.metadata) track = self.metadata;
     [[MDImportCoordinator sharedCoordinator] importAudioAtURL:url metadata:track completion:^(BOOL accepted, NSError *importError) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (accepted) self.batchSuccessCount++;
