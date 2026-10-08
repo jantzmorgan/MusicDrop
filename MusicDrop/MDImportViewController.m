@@ -3,7 +3,7 @@
 #import "MDTrackMetadata.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-@interface MDImportViewController () <UIDocumentPickerDelegate, UITextFieldDelegate>
+@interface MDImportViewController () <UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UITextFieldDelegate>
 @property (nonatomic, strong, nullable) NSURL *audioURL;
 @property (nonatomic, strong, nullable) MDTrackMetadata *metadata;
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -19,6 +19,8 @@
 @property (nonatomic, strong) UITextField *yearField;
 @property (nonatomic, strong) UITextField *trackField;
 @property (nonatomic, strong) UIButton *importButton;
+@property (nonatomic, strong) UIButton *artworkButton;
+@property (nonatomic) BOOL selectingArtwork;
 @property (nonatomic, weak, nullable) UITextField *activeField;
 @end
 
@@ -77,6 +79,10 @@
     self.artworkView.image = [UIImage systemImageNamed:@"music.note"];
     self.artworkView.tintColor = UIColor.secondaryLabelColor;
 
+    self.artworkButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.artworkButton setTitle:@"Choose Custom Cover from Photos" forState:UIControlStateNormal];
+    [self.artworkButton addTarget:self action:@selector(chooseArtworkTapped) forControlEvents:UIControlEventTouchUpInside];
+
     self.statusLabel = [UILabel new];
     self.statusLabel.text = @"Choose a local song to begin.";
     self.statusLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -109,7 +115,7 @@
     self.importButton.enabled = NO;
     [self.importButton addTarget:self action:@selector(importTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    for (UIView *view in @[self.artworkView, self.statusLabel, self.fileLabel, choose,
+    for (UIView *view in @[self.artworkView, self.artworkButton, self.statusLabel, self.fileLabel, choose,
                            self.titleField, self.artistField, self.albumField, self.albumArtistField,
                            self.genreField, self.yearField, self.trackField, self.importButton]) {
         [self.stack addArrangedSubview:view];
@@ -187,6 +193,28 @@
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
+- (void)chooseArtworkTapped {
+    if (!self.metadata) return;
+    UIImagePickerController *picker = [UIImagePickerController new];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.delegate = self;
+    picker.allowsEditing = YES;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
+    UIImage *image = info[UIImagePickerControllerEditedImage] ?: info[UIImagePickerControllerOriginalImage];
+    if (image && self.metadata) {
+        self.metadata.artwork = image;
+        self.artworkView.image = image;
+    }
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
 - (void)chooseTapped {
     UIDocumentPickerViewController *picker =
         [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
@@ -215,7 +243,7 @@
     self.genreField.text = metadata.genre;
     self.yearField.text = metadata.year.stringValue ?: @"";
     self.trackField.text = metadata.trackNumber.stringValue ?: @"";
-    if (metadata.artwork) self.artworkView.image = metadata.artwork;
+    self.artworkView.image = metadata.artwork ?: [UIImage systemImageNamed:@"music.note"];
 
     NSInteger seconds = (NSInteger)llround(metadata.duration);
     self.fileLabel.text = [NSString stringWithFormat:@"%@ • %ld:%02ld • %@",
@@ -236,8 +264,10 @@
     self.metadata.album = self.albumField.text.length ? self.albumField.text : @"Unknown Album";
     self.metadata.albumArtist = self.albumArtistField.text ?: @"";
     self.metadata.genre = self.genreField.text ?: @"";
-    self.metadata.year = self.yearField.text.length ? @([self.yearField.text integerValue]) : nil;
-    self.metadata.trackNumber = self.trackField.text.length ? @([self.trackField.text integerValue]) : nil;
+    NSInteger year = self.yearField.text.integerValue;
+    self.metadata.year = year > 0 && year <= 9999 ? @(year) : nil;
+    NSInteger track = self.trackField.text.integerValue;
+    self.metadata.trackNumber = track > 0 ? @(track) : nil;
 }
 
 - (void)importTapped {
