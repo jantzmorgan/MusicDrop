@@ -5,6 +5,11 @@
 
 @interface MDImportViewController () <UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UITextFieldDelegate>
 @property (nonatomic, strong, nullable) NSURL *audioURL;
+@property (nonatomic, strong) NSArray<NSURL *> *batchURLs;
+@property (nonatomic) NSUInteger batchIndex;
+@property (nonatomic) NSUInteger batchSuccessCount;
+@property (nonatomic) NSUInteger batchFailureCount;
+@property (nonatomic) BOOL importingBatch;
 @property (nonatomic, strong, nullable) MDTrackMetadata *metadata;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *stack;
@@ -243,7 +248,7 @@
     UIDocumentPickerViewController *picker =
         [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
     picker.delegate = self;
-    picker.allowsMultipleSelection = NO;
+    picker.allowsMultipleSelection = YES;
     [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -287,6 +292,26 @@
         else self.statusLabel.text = @"Could not open that image (maximum 20 MB).";
         return;
     }
+    if (urls.count > 1) {
+        NSMutableArray<NSURL *> *valid = [NSMutableArray array];
+        for (NSURL *url in urls) {
+            if ([[MDImportCoordinator sharedCoordinator] isSupportedAudioURL:url]) [valid addObject:url];
+        }
+        self.batchURLs = valid.copy;
+        self.batchIndex = 0;
+        self.batchSuccessCount = 0;
+        self.batchFailureCount = 0;
+        if (!valid.count) {
+            self.statusLabel.text = @"No supported audio files selected.";
+            return;
+        }
+        [self loadAudioURL:valid.firstObject];
+        self.statusLabel.text = [NSString stringWithFormat:@"%lu songs selected. Edit the first song or import the batch.", (unsigned long)valid.count];
+        [self.importButton setTitle:[NSString stringWithFormat:@"Import %lu Songs", (unsigned long)valid.count] forState:UIControlStateNormal];
+        return;
+    }
+    self.batchURLs = nil;
+    [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
     [self loadAudioURL:urls.firstObject];
 }
 
