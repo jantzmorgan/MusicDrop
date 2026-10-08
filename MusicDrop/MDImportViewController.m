@@ -14,6 +14,8 @@
 @property (nonatomic) NSUInteger selectedBatchIndex;
 @property (nonatomic, strong) UISegmentedControl *batchSelector;
 @property (nonatomic, strong) UIButton *applyCoverButton;
+@property (nonatomic, strong) UIStackView *batchList;
+@property (nonatomic, strong) UILabel *batchHeading;
 @property (nonatomic, strong, nullable) MDTrackMetadata *metadata;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *stack;
@@ -104,7 +106,7 @@
     self.fileLabel.numberOfLines = 0;
 
     UIButton *choose = [UIButton buttonWithType:UIButtonTypeSystem];
-    [choose setTitle:@"Choose Audio File" forState:UIControlStateNormal];
+    [choose setTitle:@"Choose Songs (Select Multiple)" forState:UIControlStateNormal];
     choose.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
     [choose addTarget:self action:@selector(chooseTapped) forControlEvents:UIControlEventTouchUpInside];
 
@@ -134,6 +136,14 @@
     [self.artworkView.heightAnchor constraintEqualToConstant:110].active = YES;
     [self.artworkButton setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
+    self.batchHeading = [UILabel new];
+    self.batchHeading.font = [UIFont boldSystemFontOfSize:18];
+    self.batchHeading.text = @"Selected Songs";
+    self.batchHeading.hidden = YES;
+    self.batchList = [UIStackView new];
+    self.batchList.axis = UILayoutConstraintAxisVertical;
+    self.batchList.spacing = 6;
+    self.batchList.hidden = YES;
     self.batchSelector = [[UISegmentedControl alloc] initWithItems:@[]];
     [self.batchSelector addTarget:self action:@selector(batchSelectionChanged:) forControlEvents:UIControlEventValueChanged];
     self.batchSelector.hidden = YES;
@@ -142,7 +152,7 @@
     [self.applyCoverButton addTarget:self action:@selector(applyCoverToAll) forControlEvents:UIControlEventTouchUpInside];
     self.applyCoverButton.hidden = YES;
 
-    for (UIView *view in @[coverRow, self.applyCoverButton, self.statusLabel, self.fileLabel, choose, self.batchSelector,
+    for (UIView *view in @[coverRow, self.applyCoverButton, self.statusLabel, self.fileLabel, choose, self.batchHeading, self.batchList, self.batchSelector,
                            self.titleField, self.artistField, self.albumField, self.albumArtistField,
                            self.genreField, self.yearField, self.trackField, self.importButton]) {
         [self.stack addArrangedSubview:view];
@@ -324,12 +334,51 @@
         [self.batchSelector insertSegmentWithTitle:[NSString stringWithFormat:@"%lu", (unsigned long)(i + 1)] atIndex:i animated:NO];
     }
     self.batchSelector.hidden = YES;
+    [self rebuildBatchList];
     self.navigationItem.leftBarButtonItem = valid.count > 1 ? [[UIBarButtonItem alloc] initWithTitle:@"Songs" style:UIBarButtonItemStylePlain target:self action:@selector(showBatchSongList)] : nil;
     self.applyCoverButton.hidden = valid.count <= 1;
     self.batchSelector.selectedSegmentIndex = 0;
     [self displayAudioURL:valid.firstObject metadata:tags.firstObject];
     [self.importButton setTitle:valid.count > 1 ? [NSString stringWithFormat:@"Import All (%lu)", (unsigned long)valid.count] : @"Import to Music" forState:UIControlStateNormal];
     self.statusLabel.text = valid.count > 1 ? @"Select each song to edit its own metadata and artwork." : @"Ready to import.";
+}
+
+- (void)rebuildBatchList {
+    for (UIView *view in self.batchList.arrangedSubviews.copy) {
+        [self.batchList removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+    BOOL multiple = self.batchURLs.count > 1;
+    self.batchHeading.hidden = !multiple;
+    self.batchList.hidden = !multiple;
+    if (!multiple) return;
+    for (NSUInteger i = 0; i < self.batchURLs.count; i++) {
+        MDTrackMetadata *track = self.batchMetadata[i];
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+        NSString *label = [NSString stringWithFormat:@"%lu. %@ — %@ %@", (unsigned long)(i + 1),
+                           track.title.length ? track.title : self.batchURLs[i].lastPathComponent,
+                           track.artist.length ? track.artist : @"Unknown Artist",
+                           i == self.selectedBatchIndex ? @"✓" : @"›"];
+        [button setTitle:label forState:UIControlStateNormal];
+        button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+        button.titleLabel.numberOfLines = 2;
+        button.titleLabel.font = [UIFont systemFontOfSize:14 weight:i == self.selectedBatchIndex ? UIFontWeightSemibold : UIFontWeightRegular];
+        button.tag = (NSInteger)i;
+        [button addTarget:self action:@selector(selectBatchRow:) forControlEvents:UIControlEventTouchUpInside];
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+        [self.batchList addArrangedSubview:button];
+    }
+}
+
+- (void)selectBatchRow:(UIButton *)sender {
+    if (self.importingBatch) return;
+    NSUInteger index = (NSUInteger)sender.tag;
+    if (index >= self.batchURLs.count) return;
+    [self syncFieldsToMetadata];
+    self.selectedBatchIndex = index;
+    [self displayAudioURL:self.batchURLs[index] metadata:self.batchMetadata[index]];
+    self.statusLabel.text = [NSString stringWithFormat:@"Editing song %lu of %lu", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
+    [self rebuildBatchList];
 }
 
 - (void)showBatchSongList {
@@ -392,6 +441,7 @@
         self.statusLabel.text = [NSString stringWithFormat:@"Accepted into queue: %lu of %lu. Rejected: %lu. Check Music Library for completed downloads.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
         self.batchURLs = nil;
         self.batchMetadata = nil;
+        [self rebuildBatchList];
         self.applyCoverButton.hidden = YES;
         self.navigationItem.leftBarButtonItem = nil;
         return;
@@ -418,6 +468,7 @@
 - (void)importTapped {
     if (!self.audioURL || !self.metadata || self.importingBatch) return;
     [self syncFieldsToMetadata];
+    [self rebuildBatchList];
     if (self.batchURLs.count > 1) {
         self.importingBatch = YES;
         self.batchIndex = 0;
