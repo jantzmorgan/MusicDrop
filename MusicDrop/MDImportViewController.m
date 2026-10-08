@@ -49,7 +49,13 @@
 - (UITextField *)field:(NSString *)placeholder {
     UITextField *field = [UITextField new];
     field.placeholder = placeholder;
-    field.borderStyle = UITextBorderStyleRoundedRect;
+    field.borderStyle = UITextBorderStyleNone;
+    field.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    field.layer.cornerRadius = 10;
+    field.layer.borderWidth = 0.5;
+    field.layer.borderColor = UIColor.separatorColor.CGColor;
+    field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
+    field.leftViewMode = UITextFieldViewModeAlways;
     field.clearButtonMode = UITextFieldViewModeWhileEditing;
     field.delegate = self;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -66,7 +72,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.title = @"MusicDrop";
     self.navigationItem.rightBarButtonItem =
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(closeTapped)];
@@ -78,7 +84,7 @@
 
     self.stack = [UIStackView new];
     self.stack.axis = UILayoutConstraintAxisVertical;
-    self.stack.spacing = 12;
+    self.stack.spacing = 10;
     self.stack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollView addSubview:self.stack];
 
@@ -96,7 +102,8 @@
 
     self.statusLabel = [UILabel new];
     self.statusLabel.text = @"Choose a local song to begin.";
-    self.statusLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    self.statusLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.statusLabel.textColor = UIColor.secondaryLabelColor;
     self.statusLabel.numberOfLines = 0;
 
     self.fileLabel = [UILabel new];
@@ -122,6 +129,10 @@
 
     self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
+    self.importButton.backgroundColor = UIColor.systemRedColor;
+    [self.importButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.importButton.layer.cornerRadius = 12;
+    [self.importButton.heightAnchor constraintEqualToConstant:52].active = YES;
     self.importButton.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
     self.importButton.enabled = NO;
     [self.importButton addTarget:self action:@selector(importTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -142,7 +153,7 @@
     self.batchHeading.hidden = YES;
     self.batchList = [UIStackView new];
     self.batchList.axis = UILayoutConstraintAxisVertical;
-    self.batchList.spacing = 6;
+    self.batchList.spacing = 8;
     self.batchList.hidden = YES;
     self.batchSelector = [[UISegmentedControl alloc] initWithItems:@[]];
     [self.batchSelector addTarget:self action:@selector(batchSelectionChanged:) forControlEvents:UIControlEventValueChanged];
@@ -355,17 +366,21 @@
     for (NSUInteger i = 0; i < self.batchURLs.count; i++) {
         MDTrackMetadata *track = self.batchMetadata[i];
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        NSString *label = [NSString stringWithFormat:@"%lu. %@ — %@ %@", (unsigned long)(i + 1),
-                           track.title.length ? track.title : self.batchURLs[i].lastPathComponent,
-                           track.artist.length ? track.artist : @"Unknown Artist",
-                           i == self.selectedBatchIndex ? @"✓" : @"›"];
-        [button setTitle:label forState:UIControlStateNormal];
+        BOOL selected = i == self.selectedBatchIndex;
+        NSString *name = track.title.length ? track.title : self.batchURLs[i].URLByDeletingPathExtension.lastPathComponent;
+        NSString *artist = track.artist.length ? track.artist : @"Unknown Artist";
+        [button setTitle:[NSString stringWithFormat:@"  %lu. %@\n      %@  %@", (unsigned long)(i + 1), name, artist, selected ? @"✓ Editing" : @"› Edit"] forState:UIControlStateNormal];
+        [button setTitleColor:UIColor.labelColor forState:UIControlStateNormal];
+        button.backgroundColor = selected ? [UIColor.systemRedColor colorWithAlphaComponent:0.10] : UIColor.secondarySystemGroupedBackgroundColor;
+        button.layer.cornerRadius = 12;
+        button.layer.borderWidth = selected ? 1.5 : 0.5;
+        button.layer.borderColor = (selected ? UIColor.systemRedColor : UIColor.separatorColor).CGColor;
         button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
         button.titleLabel.numberOfLines = 2;
-        button.titleLabel.font = [UIFont systemFontOfSize:14 weight:i == self.selectedBatchIndex ? UIFontWeightSemibold : UIFontWeightRegular];
+        button.titleLabel.font = [UIFont systemFontOfSize:14 weight:selected ? UIFontWeightSemibold : UIFontWeightRegular];
         button.tag = (NSInteger)i;
         [button addTarget:self action:@selector(selectBatchRow:) forControlEvents:UIControlEventTouchUpInside];
-        [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:64].active = YES;
         [self.batchList addArrangedSubview:button];
     }
 }
@@ -442,9 +457,9 @@
         NSString *summary = [NSString stringWithFormat:@"%lu of %lu songs accepted into Apple Music's import queue.%@",
                              (unsigned long)self.batchSuccessCount,
                              (unsigned long)self.batchURLs.count,
-                             self.batchFailureCount ? [NSString stringWithFormat:@"\\n%lu could not be queued.", (unsigned long)self.batchFailureCount] : @"\\nNo queue errors."];
+                             self.batchFailureCount ? [NSString stringWithFormat:@"\n%lu could not be queued.", (unsigned long)self.batchFailureCount] : @"\nNo queue errors."];
         UIAlertController *result = [UIAlertController alertControllerWithTitle:@"Batch Import Queued"
-                                                                        message:[summary stringByAppendingString:@"\\nCheck Music Library for completed downloads."]
+                                                                        message:[summary stringByAppendingString:@"\nCheck Music Library for completed downloads."]
                                                                  preferredStyle:UIAlertControllerStyleAlert];
         [result addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:result animated:YES completion:nil];
