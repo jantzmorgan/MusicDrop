@@ -321,15 +321,34 @@
     self.selectedBatchIndex = 0;
     [self.batchSelector removeAllSegments];
     for (NSUInteger i = 0; i < valid.count; i++) {
-        NSString *name = valid[i].URLByDeletingPathExtension.lastPathComponent;
-        [self.batchSelector insertSegmentWithTitle:name atIndex:i animated:NO];
+        [self.batchSelector insertSegmentWithTitle:[NSString stringWithFormat:@"%lu", (unsigned long)(i + 1)] atIndex:i animated:NO];
     }
-    self.batchSelector.hidden = valid.count <= 1;
+    self.batchSelector.hidden = YES;
+    self.navigationItem.leftBarButtonItem = valid.count > 1 ? [[UIBarButtonItem alloc] initWithTitle:@"Songs" style:UIBarButtonItemStylePlain target:self action:@selector(showBatchSongList)] : nil;
     self.applyCoverButton.hidden = valid.count <= 1;
     self.batchSelector.selectedSegmentIndex = 0;
     [self displayAudioURL:valid.firstObject metadata:tags.firstObject];
     [self.importButton setTitle:valid.count > 1 ? [NSString stringWithFormat:@"Import All (%lu)", (unsigned long)valid.count] : @"Import to Music" forState:UIControlStateNormal];
     self.statusLabel.text = valid.count > 1 ? @"Select each song to edit its own metadata and artwork." : @"Ready to import.";
+}
+
+- (void)showBatchSongList {
+    if (self.importingBatch) return;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Selected Songs" message:@"Choose a song to edit." preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSUInteger i = 0; i < self.batchURLs.count; i++) {
+        NSUInteger index = i;
+        NSString *name = self.batchMetadata[i].title ?: self.batchURLs[i].lastPathComponent;
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%lu. %@", (unsigned long)(i + 1), name] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            [self syncFieldsToMetadata];
+            self.selectedBatchIndex = index;
+            [self displayAudioURL:self.batchURLs[index] metadata:self.batchMetadata[index]];
+            self.statusLabel.text = [NSString stringWithFormat:@"Editing song %lu of %lu", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), 50, 1, 1);
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)batchSelectionChanged:(UISegmentedControl *)sender {
@@ -372,6 +391,9 @@
         [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
         self.statusLabel.text = [NSString stringWithFormat:@"Accepted into queue: %lu of %lu. Rejected: %lu. Check Music Library for completed downloads.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
         self.batchURLs = nil;
+        self.batchMetadata = nil;
+        self.applyCoverButton.hidden = YES;
+        self.navigationItem.leftBarButtonItem = nil;
         return;
     }
     NSUInteger index = self.batchIndex++;
