@@ -3,9 +3,11 @@ name: Build MusicDrop
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, feature/musicdrop-polish-20261008 ]
     paths:
       - "BUILD_TRIGGER"
+      - "MusicDrop/**"
+      - ".github/workflows/build.yml"
 
 jobs:
   build:

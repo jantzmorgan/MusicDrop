@@ -3,7 +3,7 @@
 #import "MDTrackMetadata.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-@interface MDImportViewController () <UIDocumentPickerDelegate, UITextFieldDelegate>
+@interface MDImportViewController () <UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UITextFieldDelegate>
 @property (nonatomic, strong, nullable) NSURL *audioURL;
 @property (nonatomic, strong, nullable) MDTrackMetadata *metadata;
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -19,6 +19,8 @@
 @property (nonatomic, strong) UITextField *yearField;
 @property (nonatomic, strong) UITextField *trackField;
 @property (nonatomic, strong) UIButton *importButton;
+@property (nonatomic, strong) UIButton *artworkButton;
+@property (nonatomic) BOOL selectingArtwork;
 @property (nonatomic, weak, nullable) UITextField *activeField;
 @end
 
@@ -77,6 +79,10 @@
     self.artworkView.image = [UIImage systemImageNamed:@"music.note"];
     self.artworkView.tintColor = UIColor.secondaryLabelColor;
 
+    self.artworkButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.artworkButton setTitle:@"Change Cover Artwork" forState:UIControlStateNormal];
+    [self.artworkButton addTarget:self action:@selector(chooseArtworkTapped) forControlEvents:UIControlEventTouchUpInside];
+
     self.statusLabel = [UILabel new];
     self.statusLabel.text = @"Choose a local song to begin.";
     self.statusLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -109,7 +115,17 @@
     self.importButton.enabled = NO;
     [self.importButton addTarget:self action:@selector(importTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    for (UIView *view in @[self.artworkView, self.statusLabel, self.fileLabel, choose,
+    UIStackView *coverRow = [[UIStackView alloc] initWithArrangedSubviews:@[self.artworkView, self.artworkButton]];
+    coverRow.axis = UILayoutConstraintAxisHorizontal;
+    coverRow.alignment = UIStackViewAlignmentCenter;
+    coverRow.spacing = 16;
+    self.artworkButton.titleLabel.numberOfLines = 2;
+    self.artworkButton.titleLabel.textAlignment = NSTextAlignmentLeft;
+    [self.artworkView.widthAnchor constraintEqualToConstant:110].active = YES;
+    [self.artworkView.heightAnchor constraintEqualToConstant:110].active = YES;
+    [self.artworkButton setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+
+    for (UIView *view in @[coverRow, self.statusLabel, self.fileLabel, choose,
                            self.titleField, self.artistField, self.albumField, self.albumArtistField,
                            self.genreField, self.yearField, self.trackField, self.importButton]) {
         [self.stack addArrangedSubview:view];
@@ -118,7 +134,6 @@
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
 
-    [self.artworkView.heightAnchor constraintEqualToAnchor:self.artworkView.widthAnchor].active = YES;
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor],
@@ -187,6 +202,43 @@
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
+- (void)chooseArtworkTapped {
+    if (!self.metadata) return;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Cover Artwork" message:@"Choose any image from Photos or Files." preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Files" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        self.selectingArtwork = YES;
+        UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeImage] asCopy:YES];
+        picker.delegate = self;
+        [self presentViewController:picker animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Photos" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [self chooseArtworkFromPhotos]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.artworkButton;
+    sheet.popoverPresentationController.sourceRect = self.artworkButton.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)chooseArtworkFromPhotos {
+    UIImagePickerController *picker = [UIImagePickerController new];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.delegate = self;
+    picker.allowsEditing = YES;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
+    UIImage *image = info[UIImagePickerControllerEditedImage] ?: info[UIImagePickerControllerOriginalImage];
+    if (image && self.metadata) {
+        self.metadata.artwork = image;
+        self.artworkView.image = image;
+    }
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
 - (void)chooseTapped {
     UIDocumentPickerViewController *picker =
         [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
@@ -215,20 +267,30 @@
     self.genreField.text = metadata.genre;
     self.yearField.text = metadata.year.stringValue ?: @"";
     self.trackField.text = metadata.trackNumber.stringValue ?: @"";
-    if (metadata.artwork) self.artworkView.image = metadata.artwork;
+    self.artworkView.image = metadata.artwork ?: [UIImage systemImageNamed:@"music.note"];
 
     NSInteger seconds = (NSInteger)llround(metadata.duration);
     self.fileLabel.text = [NSString stringWithFormat:@"%@ • %ld:%02ld • %@",
                            url.pathExtension.uppercaseString,
                            (long)(seconds / 60), (long)(seconds % 60),
                            url.lastPathComponent];
-    self.statusLabel.text = @"Ready to review. Edit anything below before importing.";
+    self.statusLabel.text = @"Review metadata before importing. Cover artwork is a preview until native artwork transfer is verified.";
     self.importButton.enabled = YES;
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    if (self.selectingArtwork) {
+        self.selectingArtwork = NO;
+        NSData *data = [NSData dataWithContentsOfURL:urls.firstObject];
+        UIImage *image = data.length <= 20 * 1024 * 1024 ? [UIImage imageWithData:data] : nil;
+        if (image && self.metadata) { self.metadata.artwork = image; self.artworkView.image = image; }
+        else self.statusLabel.text = @"Could not open that image (maximum 20 MB).";
+        return;
+    }
     [self loadAudioURL:urls.firstObject];
 }
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { self.selectingArtwork = NO; }
 
 - (void)syncFieldsToMetadata {
     self.metadata.title = self.titleField.text.length ? self.titleField.text : @"Unknown Title";
@@ -236,8 +298,10 @@
     self.metadata.album = self.albumField.text.length ? self.albumField.text : @"Unknown Album";
     self.metadata.albumArtist = self.albumArtistField.text ?: @"";
     self.metadata.genre = self.genreField.text ?: @"";
-    self.metadata.year = self.yearField.text.length ? @([self.yearField.text integerValue]) : nil;
-    self.metadata.trackNumber = self.trackField.text.length ? @([self.trackField.text integerValue]) : nil;
+    NSInteger year = self.yearField.text.integerValue;
+    self.metadata.year = year > 0 && year <= 9999 ? @(year) : nil;
+    NSInteger track = self.trackField.text.integerValue;
+    self.metadata.trackNumber = track > 0 ? @(track) : nil;
 }
 
 - (void)importTapped {

@@ -66,6 +66,18 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
         }
     }
 #pragma clang diagnostic pop
+    for (AVMetadataItem *item in asset.metadata) {
+        NSString *identifier = item.identifier ?: @"";
+        NSString *key = item.key ? [item.key description] : @"";
+        NSString *value = item.stringValue;
+        if ([identifier containsString:@"albumArtist"] && value.length) result.albumArtist = value;
+        if (([identifier containsString:@"trackNumber"] || [key isEqualToString:@"trkn"]) && item.numberValue.integerValue > 0) result.trackNumber = item.numberValue;
+        if (([identifier containsString:@"discNumber"] || [key isEqualToString:@"disk"]) && item.numberValue.integerValue > 0) result.discNumber = item.numberValue;
+        if (([identifier containsString:@"year"] || [identifier containsString:@"date"]) && value.length >= 4) {
+            NSInteger year = [[value substringToIndex:4] integerValue];
+            if (year > 0 && year <= 9999) result.year = @(year);
+        }
+    }
     return result;
 }
 
@@ -108,6 +120,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     }
 
     NSInteger itemID = (NSInteger)arc4random_uniform(90000000) + 10000000;
+    // Keep the native download path unchanged; only enrich its metadata dictionary.
     NSInteger year = metadata.year.integerValue ?: [[NSCalendar currentCalendar] component:NSCalendarUnitYear fromDate:NSDate.date];
     NSInteger track = metadata.trackNumber.integerValue ?: 1;
     NSInteger durationMS = (NSInteger)llround(MAX(0, metadata.duration) * 1000.0);
@@ -116,12 +129,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     NSString *title = metadata.title.length ? metadata.title : audioURL.URLByDeletingPathExtension.lastPathComponent;
     NSString *ext = audioURL.pathExtension.lowercaseString;
 
-    NSDictionary *payload = @{
-        @"purchaseDate": NSDate.date,
-        @"is-purchased-redownload": @YES,
-        @"URL": servedURL.absoluteString,
-        @"songId": @(itemID),
-        @"metadata": @{
+    NSMutableDictionary *trackInfo = [@{
             @"artistName": artist,
             @"albumArtistName": metadata.albumArtist ?: @"",
             @"composerName": metadata.composer ?: @"",
@@ -145,8 +153,38 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
             @"sort-name": title,
             @"trackCount": @1,
             @"trackNumber": @(track),
+            @"discNumber": metadata.discNumber ?: @1,
             @"year": @(year)
+    } mutableCopy];
+
+    // StoreServices metadata may accept artwork on some builds; do not assume this
+    // means the Music library will retain it. Device verification is mandatory.
+    if (metadata.artwork) {
+        UIImage *image = metadata.artwork;
+        CGSize size = image.size;
+        CGFloat scale = MIN(1.0, 1200.0 / MAX(MAX(size.width, size.height), 1.0));
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(MAX(1, floor(size.width * scale)), MAX(1, floor(size.height * scale))), YES, 1);
+        [image drawInRect:CGRectMake(0, 0, MAX(1, floor(size.width * scale)), MAX(1, floor(size.height * scale)))];
+        UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        NSData *jpeg = UIImageJPEGRepresentation(scaled ?: image, 0.85);
+        if (jpeg.length) {
+            NSString *artPath = [[NSTemporaryDirectory() stringByAppendingPathComponent:@"MusicDrop"] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", NSUUID.UUID.UUIDString]];
+            if ([jpeg writeToFile:artPath atomically:YES]) {
+                NSURL *artURL = [[MDLocalHTTPServer sharedServer] URLForFileURL:[NSURL fileURLWithPath:artPath] error:nil];
+                if (artURL) {
+                    trackInfo[@"artworkURL"] = artURL.absoluteString;
+                    trackInfo[@"artworkUrl"] = artURL.absoluteString;
+                }
+            }
         }
+    }
+    NSDictionary *payload = @{
+        @"purchaseDate": NSDate.date,
+        @"is-purchased-redownload": @YES,
+        @"URL": servedURL.absoluteString,
+        @"songId": @(itemID),
+        @"metadata": trackInfo
     };
 
     @try {
