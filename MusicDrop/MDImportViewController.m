@@ -115,7 +115,17 @@
     self.importButton.enabled = NO;
     [self.importButton addTarget:self action:@selector(importTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    for (UIView *view in @[self.artworkView, self.artworkButton, self.statusLabel, self.fileLabel, choose,
+    UIStackView *coverRow = [[UIStackView alloc] initWithArrangedSubviews:@[self.artworkView, self.artworkButton]];
+    coverRow.axis = UILayoutConstraintAxisHorizontal;
+    coverRow.alignment = UIStackViewAlignmentCenter;
+    coverRow.spacing = 16;
+    self.artworkButton.titleLabel.numberOfLines = 2;
+    self.artworkButton.titleLabel.textAlignment = NSTextAlignmentLeft;
+    [self.artworkView.widthAnchor constraintEqualToConstant:110].active = YES;
+    [self.artworkView.heightAnchor constraintEqualToConstant:110].active = YES;
+    [self.artworkButton setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+
+    for (UIView *view in @[coverRow, self.statusLabel, self.fileLabel, choose,
                            self.titleField, self.artistField, self.albumField, self.albumArtistField,
                            self.genreField, self.yearField, self.trackField, self.importButton]) {
         [self.stack addArrangedSubview:view];
@@ -124,7 +134,6 @@
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
 
-    [self.artworkView.heightAnchor constraintEqualToAnchor:self.artworkView.widthAnchor].active = YES;
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor],
