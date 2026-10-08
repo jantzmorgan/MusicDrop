@@ -265,7 +265,7 @@
                            url.pathExtension.uppercaseString,
                            (long)(seconds / 60), (long)(seconds % 60),
                            url.lastPathComponent];
-    self.statusLabel.text = @"Ready to review. Edit anything below before importing.";
+    self.statusLabel.text = @"Review metadata before importing. Cover artwork is a preview until native artwork transfer is verified.";
     self.importButton.enabled = YES;
 }
 
