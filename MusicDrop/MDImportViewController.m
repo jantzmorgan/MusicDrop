@@ -80,7 +80,7 @@
     self.artworkView.tintColor = UIColor.secondaryLabelColor;
 
     self.artworkButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.artworkButton setTitle:@"Choose Custom Cover from Photos" forState:UIControlStateNormal];
+    [self.artworkButton setTitle:@"Change Cover Artwork" forState:UIControlStateNormal];
     [self.artworkButton addTarget:self action:@selector(chooseArtworkTapped) forControlEvents:UIControlEventTouchUpInside];
 
     self.statusLabel = [UILabel new];
@@ -195,6 +195,21 @@
 
 - (void)chooseArtworkTapped {
     if (!self.metadata) return;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Cover Artwork" message:@"Choose any image from Photos or Files." preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Files" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        self.selectingArtwork = YES;
+        UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeImage] asCopy:YES];
+        picker.delegate = self;
+        [self presentViewController:picker animated:YES completion:nil];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Photos" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [self chooseArtworkFromPhotos]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.artworkButton;
+    sheet.popoverPresentationController.sourceRect = self.artworkButton.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)chooseArtworkFromPhotos {
     UIImagePickerController *picker = [UIImagePickerController new];
     picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
     picker.delegate = self;
@@ -255,8 +270,18 @@
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    if (self.selectingArtwork) {
+        self.selectingArtwork = NO;
+        NSData *data = [NSData dataWithContentsOfURL:urls.firstObject];
+        UIImage *image = data.length <= 20 * 1024 * 1024 ? [UIImage imageWithData:data] : nil;
+        if (image && self.metadata) { self.metadata.artwork = image; self.artworkView.image = image; }
+        else self.statusLabel.text = @"Could not open that image (maximum 20 MB).";
+        return;
+    }
     [self loadAudioURL:urls.firstObject];
 }
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { self.selectingArtwork = NO; }
 
 - (void)syncFieldsToMetadata {
     self.metadata.title = self.titleField.text.length ? self.titleField.text : @"Unknown Title";
