@@ -439,6 +439,15 @@
         self.importButton.enabled = YES;
         [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
         self.statusLabel.text = [NSString stringWithFormat:@"Accepted into queue: %lu of %lu. Rejected: %lu. Check Music Library for completed downloads.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
+        NSString *summary = [NSString stringWithFormat:@"%lu of %lu songs accepted into Apple Music's import queue.%@",
+                             (unsigned long)self.batchSuccessCount,
+                             (unsigned long)self.batchURLs.count,
+                             self.batchFailureCount ? [NSString stringWithFormat:@"\\n%lu could not be queued.", (unsigned long)self.batchFailureCount] : @"\\nNo queue errors."];
+        UIAlertController *result = [UIAlertController alertControllerWithTitle:@"Batch Import Queued"
+                                                                        message:[summary stringByAppendingString:@"\\nCheck Music Library for completed downloads."]
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+        [result addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:result animated:YES completion:nil];
         self.batchURLs = nil;
         self.batchMetadata = nil;
         [self rebuildBatchList];
