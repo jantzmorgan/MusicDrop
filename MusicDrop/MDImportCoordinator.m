@@ -120,6 +120,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     }
 
     NSInteger itemID = (NSInteger)arc4random_uniform(90000000) + 10000000;
+    // Keep the native download path unchanged; only enrich its metadata dictionary.
     NSInteger year = metadata.year.integerValue ?: [[NSCalendar currentCalendar] component:NSCalendarUnitYear fromDate:NSDate.date];
     NSInteger track = metadata.trackNumber.integerValue ?: 1;
     NSInteger durationMS = (NSInteger)llround(MAX(0, metadata.duration) * 1000.0);
@@ -128,7 +129,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     NSString *title = metadata.title.length ? metadata.title : audioURL.URLByDeletingPathExtension.lastPathComponent;
     NSString *ext = audioURL.pathExtension.lowercaseString;
 
-    NSDictionary *payload = @{
+    NSMutableDictionary *trackInfo = [@{
         @"purchaseDate": NSDate.date,
         @"is-purchased-redownload": @YES,
         @"URL": servedURL.absoluteString,
@@ -159,7 +160,27 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
             @"trackNumber": @(track),
             @"discNumber": metadata.discNumber ?: @1,
             @"year": @(year)
-        }
+        } mutableCopy];
+
+    // StoreServices metadata may accept artwork on some builds; do not assume this
+    // means the Music library will retain it. Device verification is mandatory.
+    if (metadata.artwork) {
+        UIImage *image = metadata.artwork;
+        CGSize size = image.size;
+        CGFloat scale = MIN(1.0, 1200.0 / MAX(MAX(size.width, size.height), 1.0));
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(MAX(1, floor(size.width * scale)), MAX(1, floor(size.height * scale))), YES, 1);
+        [image drawInRect:CGRectMake(0, 0, MAX(1, floor(size.width * scale)), MAX(1, floor(size.height * scale)))];
+        UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        NSData *jpeg = UIImageJPEGRepresentation(scaled ?: image, 0.85);
+        if (jpeg.length) trackInfo[@"artworkData"] = jpeg;
+    }
+    NSDictionary *payload = @{
+        @"purchaseDate": NSDate.date,
+        @"is-purchased-redownload": @YES,
+        @"URL": servedURL.absoluteString,
+        @"songId": @(itemID),
+        @"metadata": trackInfo
     };
 
     @try {
