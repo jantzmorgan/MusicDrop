@@ -3,7 +3,7 @@ name: Build MusicDrop
 on:
   workflow_dispatch:
   push:
-    branches: [ main, feature/musicdrop-polish-20261008 ]
+    branches: [ main, feature/musicdrop-polish-20261008, feature/batch-import-20261008 ]
     paths:
       - "BUILD_TRIGGER"
       - "MusicDrop/**"
