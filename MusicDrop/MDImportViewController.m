@@ -5,6 +5,17 @@
 
 @interface MDImportViewController () <UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UITextFieldDelegate>
 @property (nonatomic, strong, nullable) NSURL *audioURL;
+@property (nonatomic, strong) NSArray<NSURL *> *batchURLs;
+@property (nonatomic) NSUInteger batchIndex;
+@property (nonatomic) NSUInteger batchSuccessCount;
+@property (nonatomic) NSUInteger batchFailureCount;
+@property (nonatomic) BOOL importingBatch;
+@property (nonatomic, strong) NSMutableArray<MDTrackMetadata *> *batchMetadata;
+@property (nonatomic) NSUInteger selectedBatchIndex;
+@property (nonatomic, strong) UISegmentedControl *batchSelector;
+@property (nonatomic, strong) UIButton *applyCoverButton;
+@property (nonatomic, strong) UIStackView *batchList;
+@property (nonatomic, strong) UILabel *batchHeading;
 @property (nonatomic, strong, nullable) MDTrackMetadata *metadata;
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *stack;
@@ -38,7 +49,13 @@
 - (UITextField *)field:(NSString *)placeholder {
     UITextField *field = [UITextField new];
     field.placeholder = placeholder;
-    field.borderStyle = UITextBorderStyleRoundedRect;
+    field.borderStyle = UITextBorderStyleNone;
+    field.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    field.layer.cornerRadius = 10;
+    field.layer.borderWidth = 0.5;
+    field.layer.borderColor = UIColor.separatorColor.CGColor;
+    field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
+    field.leftViewMode = UITextFieldViewModeAlways;
     field.clearButtonMode = UITextFieldViewModeWhileEditing;
     field.delegate = self;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -55,7 +72,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.title = @"MusicDrop";
     self.navigationItem.rightBarButtonItem =
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(closeTapped)];
@@ -67,7 +84,7 @@
 
     self.stack = [UIStackView new];
     self.stack.axis = UILayoutConstraintAxisVertical;
-    self.stack.spacing = 12;
+    self.stack.spacing = 10;
     self.stack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.scrollView addSubview:self.stack];
 
@@ -85,7 +102,8 @@
 
     self.statusLabel = [UILabel new];
     self.statusLabel.text = @"Choose a local song to begin.";
-    self.statusLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    self.statusLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.statusLabel.textColor = UIColor.secondaryLabelColor;
     self.statusLabel.numberOfLines = 0;
 
     self.fileLabel = [UILabel new];
@@ -95,7 +113,7 @@
     self.fileLabel.numberOfLines = 0;
 
     UIButton *choose = [UIButton buttonWithType:UIButtonTypeSystem];
-    [choose setTitle:@"Choose Audio File" forState:UIControlStateNormal];
+    [choose setTitle:@"Choose Songs (Select Multiple)" forState:UIControlStateNormal];
     choose.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
     [choose addTarget:self action:@selector(chooseTapped) forControlEvents:UIControlEventTouchUpInside];
 
@@ -111,6 +129,10 @@
 
     self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
+    self.importButton.backgroundColor = UIColor.systemRedColor;
+    [self.importButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.importButton.layer.cornerRadius = 12;
+    [self.importButton.heightAnchor constraintEqualToConstant:52].active = YES;
     self.importButton.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
     self.importButton.enabled = NO;
     [self.importButton addTarget:self action:@selector(importTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -125,7 +147,23 @@
     [self.artworkView.heightAnchor constraintEqualToConstant:110].active = YES;
     [self.artworkButton setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-    for (UIView *view in @[coverRow, self.statusLabel, self.fileLabel, choose,
+    self.batchHeading = [UILabel new];
+    self.batchHeading.font = [UIFont boldSystemFontOfSize:18];
+    self.batchHeading.text = @"Selected Songs";
+    self.batchHeading.hidden = YES;
+    self.batchList = [UIStackView new];
+    self.batchList.axis = UILayoutConstraintAxisVertical;
+    self.batchList.spacing = 8;
+    self.batchList.hidden = YES;
+    self.batchSelector = [[UISegmentedControl alloc] initWithItems:@[]];
+    [self.batchSelector addTarget:self action:@selector(batchSelectionChanged:) forControlEvents:UIControlEventValueChanged];
+    self.batchSelector.hidden = YES;
+    self.applyCoverButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.applyCoverButton setTitle:@"Apply Cover to All Songs" forState:UIControlStateNormal];
+    [self.applyCoverButton addTarget:self action:@selector(applyCoverToAll) forControlEvents:UIControlEventTouchUpInside];
+    self.applyCoverButton.hidden = YES;
+
+    for (UIView *view in @[coverRow, self.applyCoverButton, self.statusLabel, self.fileLabel, choose, self.batchHeading, self.batchList, self.batchSelector,
                            self.titleField, self.artistField, self.albumField, self.albumArtistField,
                            self.genreField, self.yearField, self.trackField, self.importButton]) {
         [self.stack addArrangedSubview:view];
@@ -243,7 +281,7 @@
     UIDocumentPickerViewController *picker =
         [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeAudio] asCopy:YES];
     picker.delegate = self;
-    picker.allowsMultipleSelection = NO;
+    picker.allowsMultipleSelection = YES;
     [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -258,6 +296,10 @@
         return;
     }
 
+    [self displayAudioURL:url metadata:metadata];
+}
+
+- (void)displayAudioURL:(NSURL *)url metadata:(MDTrackMetadata *)metadata {
     self.audioURL = url;
     self.metadata = metadata;
     self.titleField.text = metadata.title;
@@ -287,7 +329,109 @@
         else self.statusLabel.text = @"Could not open that image (maximum 20 MB).";
         return;
     }
-    [self loadAudioURL:urls.firstObject];
+    NSMutableArray<NSURL *> *valid = [NSMutableArray array];
+    NSMutableArray<MDTrackMetadata *> *tags = [NSMutableArray array];
+    for (NSURL *url in urls) {
+        if (![[MDImportCoordinator sharedCoordinator] isSupportedAudioURL:url]) continue;
+        MDTrackMetadata *tag = [[MDImportCoordinator sharedCoordinator] metadataForAudioURL:url error:nil];
+        if (tag) { [valid addObject:url]; [tags addObject:tag]; }
+    }
+    if (!valid.count) { self.statusLabel.text = @"No readable audio files selected."; return; }
+    self.batchURLs = valid.copy;
+    self.batchMetadata = tags;
+    self.selectedBatchIndex = 0;
+    [self.batchSelector removeAllSegments];
+    for (NSUInteger i = 0; i < valid.count; i++) {
+        [self.batchSelector insertSegmentWithTitle:[NSString stringWithFormat:@"%lu", (unsigned long)(i + 1)] atIndex:i animated:NO];
+    }
+    self.batchSelector.hidden = YES;
+    [self rebuildBatchList];
+    self.navigationItem.leftBarButtonItem = valid.count > 1 ? [[UIBarButtonItem alloc] initWithTitle:@"Songs" style:UIBarButtonItemStylePlain target:self action:@selector(showBatchSongList)] : nil;
+    self.applyCoverButton.hidden = valid.count <= 1;
+    self.batchSelector.selectedSegmentIndex = 0;
+    [self displayAudioURL:valid.firstObject metadata:tags.firstObject];
+    [self.importButton setTitle:valid.count > 1 ? [NSString stringWithFormat:@"Import All (%lu)", (unsigned long)valid.count] : @"Import to Music" forState:UIControlStateNormal];
+    self.statusLabel.text = valid.count > 1 ? @"Select each song to edit its own metadata and artwork." : @"Ready to import.";
+}
+
+- (void)rebuildBatchList {
+    for (UIView *view in self.batchList.arrangedSubviews.copy) {
+        [self.batchList removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+    BOOL multiple = self.batchURLs.count > 1;
+    self.batchHeading.hidden = !multiple;
+    self.batchList.hidden = !multiple;
+    if (!multiple) return;
+    for (NSUInteger i = 0; i < self.batchURLs.count; i++) {
+        MDTrackMetadata *track = self.batchMetadata[i];
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+        BOOL selected = i == self.selectedBatchIndex;
+        NSString *name = track.title.length ? track.title : self.batchURLs[i].URLByDeletingPathExtension.lastPathComponent;
+        NSString *artist = track.artist.length ? track.artist : @"Unknown Artist";
+        [button setTitle:[NSString stringWithFormat:@"  %lu. %@\n      %@  %@", (unsigned long)(i + 1), name, artist, selected ? @"✓ Editing" : @"› Edit"] forState:UIControlStateNormal];
+        [button setTitleColor:UIColor.labelColor forState:UIControlStateNormal];
+        button.backgroundColor = selected ? [UIColor.systemRedColor colorWithAlphaComponent:0.10] : UIColor.secondarySystemGroupedBackgroundColor;
+        button.layer.cornerRadius = 12;
+        button.layer.borderWidth = selected ? 1.5 : 0.5;
+        button.layer.borderColor = (selected ? UIColor.systemRedColor : UIColor.separatorColor).CGColor;
+        button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+        button.titleLabel.numberOfLines = 2;
+        button.titleLabel.font = [UIFont systemFontOfSize:14 weight:selected ? UIFontWeightSemibold : UIFontWeightRegular];
+        button.tag = (NSInteger)i;
+        [button addTarget:self action:@selector(selectBatchRow:) forControlEvents:UIControlEventTouchUpInside];
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:64].active = YES;
+        [self.batchList addArrangedSubview:button];
+    }
+}
+
+- (void)selectBatchRow:(UIButton *)sender {
+    if (self.importingBatch) return;
+    NSUInteger index = (NSUInteger)sender.tag;
+    if (index >= self.batchURLs.count) return;
+    [self syncFieldsToMetadata];
+    self.selectedBatchIndex = index;
+    [self displayAudioURL:self.batchURLs[index] metadata:self.batchMetadata[index]];
+    self.statusLabel.text = [NSString stringWithFormat:@"Editing song %lu of %lu", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
+    [self rebuildBatchList];
+}
+
+- (void)showBatchSongList {
+    if (self.importingBatch) return;
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Selected Songs" message:@"Choose a song to edit." preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSUInteger i = 0; i < self.batchURLs.count; i++) {
+        NSUInteger index = i;
+        NSString *name = self.batchMetadata[i].title ?: self.batchURLs[i].lastPathComponent;
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%lu. %@", (unsigned long)(i + 1), name] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            [self syncFieldsToMetadata];
+            self.selectedBatchIndex = index;
+            [self displayAudioURL:self.batchURLs[index] metadata:self.batchMetadata[index]];
+            self.statusLabel.text = [NSString stringWithFormat:@"Editing song %lu of %lu", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), 50, 1, 1);
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)batchSelectionChanged:(UISegmentedControl *)sender {
+    if (self.importingBatch || sender.selectedSegmentIndex < 0) return;
+    [self syncFieldsToMetadata];
+    NSUInteger index = (NSUInteger)sender.selectedSegmentIndex;
+    if (index >= self.batchURLs.count) return;
+    self.selectedBatchIndex = index;
+    [self displayAudioURL:self.batchURLs[index] metadata:self.batchMetadata[index]];
+}
+
+- (void)applyCoverToAll {
+    [self syncFieldsToMetadata];
+    if (!self.metadata.artwork || self.batchMetadata.count < 2) {
+        self.statusLabel.text = @"Choose a cover image first.";
+        return;
+    }
+    for (MDTrackMetadata *track in self.batchMetadata) track.artwork = self.metadata.artwork;
+    self.statusLabel.text = @"Cover applied to all selected songs.";
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { self.selectingArtwork = NO; }
@@ -304,9 +448,59 @@
     self.metadata.trackNumber = track > 0 ? @(track) : nil;
 }
 
+- (void)importNextBatchItem {
+    if (self.batchIndex >= self.batchURLs.count) {
+        self.importingBatch = NO;
+        self.importButton.enabled = YES;
+        [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
+        self.statusLabel.text = [NSString stringWithFormat:@"Accepted into queue: %lu of %lu. Rejected: %lu. Check Music Library for completed downloads.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
+        NSString *summary = [NSString stringWithFormat:@"%lu of %lu songs accepted into Apple Music's import queue.%@",
+                             (unsigned long)self.batchSuccessCount,
+                             (unsigned long)self.batchURLs.count,
+                             self.batchFailureCount ? [NSString stringWithFormat:@"\n%lu could not be queued.", (unsigned long)self.batchFailureCount] : @"\nNo queue errors."];
+        UIAlertController *result = [UIAlertController alertControllerWithTitle:@"Batch Import Queued"
+                                                                        message:[summary stringByAppendingString:@"\nCheck Music Library for completed downloads."]
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+        [result addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:result animated:YES completion:nil];
+        self.batchURLs = nil;
+        self.batchMetadata = nil;
+        [self rebuildBatchList];
+        self.applyCoverButton.hidden = YES;
+        self.navigationItem.leftBarButtonItem = nil;
+        return;
+    }
+    NSUInteger index = self.batchIndex++;
+    NSURL *url = self.batchURLs[index];
+    self.importButton.enabled = NO;
+    self.statusLabel.text = [NSString stringWithFormat:@"Queueing song %lu of %lu…", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
+    MDTrackMetadata *track = index < self.batchMetadata.count ? self.batchMetadata[index] : nil;
+    if (!track) {
+        self.batchFailureCount++;
+        dispatch_async(dispatch_get_main_queue(), ^{ [self importNextBatchItem]; });
+        return;
+    }
+    [[MDImportCoordinator sharedCoordinator] importAudioAtURL:url metadata:track completion:^(BOOL accepted, NSError *importError) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (accepted) self.batchSuccessCount++;
+            else self.batchFailureCount++;
+            [self importNextBatchItem];
+        });
+    }];
+}
+
 - (void)importTapped {
-    if (!self.audioURL || !self.metadata) return;
+    if (!self.audioURL || !self.metadata || self.importingBatch) return;
     [self syncFieldsToMetadata];
+    [self rebuildBatchList];
+    if (self.batchURLs.count > 1) {
+        self.importingBatch = YES;
+        self.batchIndex = 0;
+        self.batchSuccessCount = 0;
+        self.batchFailureCount = 0;
+        [self importNextBatchItem];
+        return;
+    }
     self.importButton.enabled = NO;
     self.statusLabel.text = @"Attempting native Music import…";
 

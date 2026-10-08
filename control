@@ -6,4 +6,5 @@ Description: Import and convert local media inside the native iOS Music app.
 Maintainer: Jantz Morgan
 Author: Jantz Morgan
 Section: Tweaks
+Icon: https://raw.githubusercontent.com/jantzmorgan/MusicDrop/main/MusicDrop/MusicDrop-Retro-Icon.png
 Depends: mobilesubstrate
