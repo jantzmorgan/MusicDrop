@@ -400,7 +400,6 @@
     NSURL *url = self.batchURLs[index];
     self.importButton.enabled = NO;
     self.statusLabel.text = [NSString stringWithFormat:@"Queueing song %lu of %lu…", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
-    NSError *error = nil;
     MDTrackMetadata *track = index < self.batchMetadata.count ? self.batchMetadata[index] : nil;
     if (!track) {
         self.batchFailureCount++;
