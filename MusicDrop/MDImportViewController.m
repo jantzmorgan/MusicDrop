@@ -334,7 +334,7 @@
         self.importingBatch = NO;
         self.importButton.enabled = YES;
         [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
-        self.statusLabel.text = [NSString stringWithFormat:@"Queued %lu of %lu songs. %lu failed.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
+        self.statusLabel.text = [NSString stringWithFormat:@"Accepted into queue: %lu of %lu. Rejected: %lu. Check Music Library for completed downloads.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
         self.batchURLs = nil;
         return;
     }
