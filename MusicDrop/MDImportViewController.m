@@ -329,9 +329,48 @@
     self.metadata.trackNumber = track > 0 ? @(track) : nil;
 }
 
+- (void)importNextBatchItem {
+    if (self.batchIndex >= self.batchURLs.count) {
+        self.importingBatch = NO;
+        self.importButton.enabled = YES;
+        [self.importButton setTitle:@"Import to Music" forState:UIControlStateNormal];
+        self.statusLabel.text = [NSString stringWithFormat:@"Queued %lu of %lu songs. %lu failed.", (unsigned long)self.batchSuccessCount, (unsigned long)self.batchURLs.count, (unsigned long)self.batchFailureCount];
+        self.batchURLs = nil;
+        return;
+    }
+    NSUInteger index = self.batchIndex++;
+    NSURL *url = self.batchURLs[index];
+    self.importButton.enabled = NO;
+    self.statusLabel.text = [NSString stringWithFormat:@"Queueing song %lu of %lu…", (unsigned long)(index + 1), (unsigned long)self.batchURLs.count];
+    NSError *error = nil;
+    MDTrackMetadata *track = [[MDImportCoordinator sharedCoordinator] metadataForAudioURL:url error:&error];
+    if (!track) {
+        self.batchFailureCount++;
+        dispatch_async(dispatch_get_main_queue(), ^{ [self importNextBatchItem]; });
+        return;
+    }
+    // First song may be edited by the user. Subsequent songs retain their own embedded tags.
+    if (index == 0 && self.metadata) track = self.metadata;
+    [[MDImportCoordinator sharedCoordinator] importAudioAtURL:url metadata:track completion:^(BOOL accepted, NSError *importError) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (accepted) self.batchSuccessCount++;
+            else self.batchFailureCount++;
+            [self importNextBatchItem];
+        });
+    }];
+}
+
 - (void)importTapped {
-    if (!self.audioURL || !self.metadata) return;
+    if (!self.audioURL || !self.metadata || self.importingBatch) return;
     [self syncFieldsToMetadata];
+    if (self.batchURLs.count > 1) {
+        self.importingBatch = YES;
+        self.batchIndex = 0;
+        self.batchSuccessCount = 0;
+        self.batchFailureCount = 0;
+        [self importNextBatchItem];
+        return;
+    }
     self.importButton.enabled = NO;
     self.statusLabel.text = @"Attempting native Music import…";
 
