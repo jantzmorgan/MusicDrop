@@ -130,11 +130,6 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
     NSString *ext = audioURL.pathExtension.lowercaseString;
 
     NSMutableDictionary *trackInfo = [@{
-        @"purchaseDate": NSDate.date,
-        @"is-purchased-redownload": @YES,
-        @"URL": servedURL.absoluteString,
-        @"songId": @(itemID),
-        @"metadata": @{
             @"artistName": artist,
             @"albumArtistName": metadata.albumArtist ?: @"",
             @"composerName": metadata.composer ?: @"",
@@ -160,7 +155,7 @@ static NSString * const MDErrorDomain = @"com.jantzmorgan.musicdrop";
             @"trackNumber": @(track),
             @"discNumber": metadata.discNumber ?: @1,
             @"year": @(year)
-        } mutableCopy];
+    } mutableCopy];
 
     // StoreServices metadata may accept artwork on some builds; do not assume this
     // means the Music library will retain it. Device verification is mandatory.
